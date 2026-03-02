@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Microsoft OneDrive Token Generator</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #0078d4;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            border-radius: 4px;
+        }
+
+        button:hover {
+            background-color: #005a9e;
+        }
+
+        button#copy-btn {
+            background-color: #28a745;
+            margin-top: 10px;
+        }
+
+        button#copy-btn:hover {
+            background-color: #218838;
+        }
+
+        #token-display {
+            margin-top: 20px;
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            resize: vertical;
+            font-family: monospace;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+    <!-- MSAL.js v3 -->
+    <script type="text/javascript" src="https://alcdn.msauth.net/browser/2.37.1/js/msal-browser.min.js"></script>
+</head>
+
+<body>
+
+    <h1>Microsoft OneDrive Login</h1>
+    <p>Enter your Client ID (Application ID) and Tenant ID to authenticate and get an access token. The login uses
+        MSAL.js for OAuth2 Implicit/SPA flow.</p>
+
+    <div class="form-group">
+        <label for="client-id">Client ID:</label>
+        <input type="text" id="client-id" placeholder="e.g. 11111111-1111-1111-1111-111111111111">
+    </div>
+
+    <div class="form-group">
+        <label for="tenant-id">Tenant ID:</label>
+        <input type="text" id="tenant-id" placeholder="e.g. common (or your specific tenant GUID)">
+    </div>
+
+    <button id="login-btn" onclick="handleAuth()">Login to Microsoft Graph</button>
+
+    <div id="token-display">
+        <h3>Access Token:</h3>
+        <textarea id="access-token" readonly rows="6"></textarea>
+        <button id="copy-btn" onclick="copyToken()">Copy Token</button>
+
+        <h3>Full .ENV Content:</h3>
+        <textarea id="env-content" readonly rows="12"></textarea>
+        <button id="copy-env-btn" onclick="copyEnv()">Copy .ENV</button>
+    </div>
+
+    <script>
+        let msalInstance = null;
+        let loginRequest = {
+            scopes: ["Files.ReadWrite.All", "User.Read"]
+        };
+
+        window.onload = async function () {
+            const storedClientId = localStorage.getItem('ms_client_id');
+            const storedTenantId = localStorage.getItem('ms_tenant_id') || 'common';
+            if (storedClientId) document.getElementById('client-id').value = storedClientId;
+            document.getElementById('tenant-id').value = storedTenantId;
+
+            // If we have clientId, we can initialize MSAL to check if we are returning from a redirect
+            if (storedClientId) {
+                initializeMsal(storedClientId, storedTenantId);
+                try {
+                    const response = await msalInstance.handleRedirectPromise();
+                    if (response && response.accessToken) {
+                        displayToken(response.accessToken, storedClientId, storedTenantId);
+                    }
+                } catch (err) {
+                    console.error("Redirect error:", err);
+                    alert("Failed to process login redirect: " + err.message);
+                }
+            }
+        }
+
+        function initializeMsal(clientId, tenantId) {
+            // Determine if the user is running on https or http
+            const currentOrigin = window.location.origin;
+            const redirectUri = currentOrigin + "/microsoft-login.html";
+
+            const msalConfig = {
+                auth: {
+                    clientId: clientId,
+                    authority: `https://login.microsoftonline.com/${tenantId}`,
+                    redirectUri: redirectUri,
+                }
+            };
+            msalInstance = new msal.PublicClientApplication(msalConfig);
+        }
+
+        async function handleAuth() {
+            const clientId = document.getElementById('client-id').value.trim();
+            const tenantId = document.getElementById('tenant-id').value.trim() || 'common';
+
+            if (!clientId) {
+                alert('Please enter a Client ID');
+                return;
+            }
+
+            localStorage.setItem('ms_client_id', clientId);
+            localStorage.setItem('ms_tenant_id', tenantId);
+
+            initializeMsal(clientId, tenantId);
+
+            try {
+                // Use redirect flow instead of popup. This avoids popup blockers and 
+                // cleanly returns the user to this page with the '#code=...' in the URL,
+                // which handleRedirectPromise() will then automatically exchange for the JWT Access Token!
+                await msalInstance.loginRedirect(loginRequest);
+            } catch (err) {
+                console.error(err);
+                alert('Login failed: ' + (err.message || err));
+            }
+        }
+
+        function displayToken(accessToken, clientId, tenantId) {
+            document.getElementById('token-display').style.display = 'block';
+            document.getElementById('access-token').value = accessToken;
+
+            const envContent = `# To run tests against the real Microsoft Graph API
+# Copy this file to .ENV and fill in the values
+
+# 'mock' (default) or 'real'
+TEST_TARGET=real
+
+# OAuth2 Access Token for your Microsoft Account
+# Get one via 'npm run example:login'
+ONEDRIVE_TOKEN=${accessToken}
+
+# Client ID for the Microsoft Login Example
+ONEDRIVE_CLIENT_ID=${clientId}
+ONEDRIVE_TENANT_ID=${tenantId}
+
+# Optional: Simulate latency in ms (only works with TEST_TARGET=mock)
+# LATENCY=50
+`;
+            document.getElementById('env-content').value = envContent;
+        }
+
+        function copyToken() {
+            copyToClipboard('access-token', 'copy-btn');
+        }
+
+        function copyEnv() {
+            copyToClipboard('env-content', 'copy-env-btn');
+        }
+
+        function copyToClipboard(elementId, buttonId) {
+            const textEl = document.getElementById(elementId);
+            textEl.select();
+            textEl.setSelectionRange(0, 99999);
+
+            navigator.clipboard.writeText(textEl.value).then(() => {
+                const btn = document.getElementById(buttonId);
+                const originalText = btn.innerText;
+                btn.innerText = 'Copied!';
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+            });
+        }
+    </script>
+</body>
+
+</html>
