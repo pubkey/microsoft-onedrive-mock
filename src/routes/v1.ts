@@ -4,11 +4,28 @@ import { driveStore } from '../store';
 export const createV1Router = () => {
     const app = express.Router();
 
+    // Helper to apply ?$select=id,name
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const applySelect = (item: any, selectQuery?: string | string[] | qs.ParsedQs | qs.ParsedQs[]) => {
+        if (!selectQuery || typeof selectQuery !== 'string') return item;
+        const fields = selectQuery.split(',').map(f => f.trim());
+        if (fields.length === 0) return item;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result: any = {};
+        for (const field of fields) {
+            if (item[field] !== undefined) {
+                result[field] = item[field];
+            }
+        }
+        return result;
+    };
+
     // GET /me/drive/root
     app.get('/v1.0/me/drive/root', (req: Request, res: Response) => {
         const root = driveStore.getItem('root');
         if (!root) return res.status(404).json({ error: { message: "Root not found" } });
-        res.json(root);
+        res.json(applySelect(root, req.query.$select as string));
     });
 
     // GET /me/drive/items/{id}
@@ -21,14 +38,32 @@ export const createV1Router = () => {
             res.status(404).json({ error: { code: "itemNotFound", message: "Item not found" } });
             return;
         }
-        res.json(item);
+        res.json(applySelect(item, req.query.$select as string));
     });
 
     // GET /me/drive/items/{id}/children
     app.get('/v1.0/me/drive/items/:itemId/children', (req: Request, res: Response) => {
         const itemId = req.params.itemId as string;
         const children = driveStore.listItems(itemId);
-        res.json({ value: children });
+        const mappedChildren = children.map(c => applySelect(c, req.query.$select as string));
+        res.json({ value: mappedChildren });
+    });
+
+    // GET /me/drive/root/search(q='query')
+    app.get('/v1.0/me/drive/root/search\\(q=\':query\'\\)', (req: Request, res: Response) => {
+        let query = (req.params.query as string) || "";
+        // Decode URI component incase it's URL encoded like %20 or %27
+        query = decodeURIComponent(query);
+        // Strip out the trailing quote matching if it caught the literal '
+        if (query.endsWith("'")) query = query.slice(0, -1);
+        query = query.toLowerCase();
+
+        // recursively find items
+        const allItems = driveStore.getAllItems();
+        const results = allItems.filter(item => item.name.toLowerCase().includes(query) && item.id !== 'root');
+
+        const mappedResults = results.map(c => applySelect(c, req.query.$select as string));
+        res.json({ value: mappedResults });
     });
 
     // POST /me/drive/items/{parent-id}/children (Create Metadata / Folder)
@@ -51,7 +86,7 @@ export const createV1Router = () => {
             ...body
         }, isFolder);
 
-        res.status(201).json(newItem);
+        res.status(201).json(applySelect(newItem, req.query.$select as string));
     });
 
     // DELETE /me/drive/items/{id}
@@ -62,11 +97,19 @@ export const createV1Router = () => {
             return;
         }
 
-        const deleted = driveStore.deleteItem(fileId);
-        if (!deleted) {
+        const item = driveStore.getItem(fileId);
+        if (!item) {
             res.status(404).json({ error: { code: "itemNotFound", message: "Item not found" } });
             return;
         }
+
+        const ifMatch = req.header('If-Match');
+        if (ifMatch && ifMatch !== item.eTag) {
+            res.status(412).json({ error: { code: "PreconditionFailed", message: "ETag mismatch" } });
+            return;
+        }
+
+        driveStore.deleteItem(fileId);
         res.status(204).send();
     });
 
@@ -114,6 +157,12 @@ export const createV1Router = () => {
         const isNew = !item;
 
         if (item) {
+            const ifMatch = req.header('If-Match');
+            if (ifMatch && ifMatch !== item.eTag) {
+                res.status(412).json({ error: { code: "PreconditionFailed", message: "ETag mismatch" } });
+                return;
+            }
+
             // Update
             item = driveStore.updateItem(item.id, { content, file: { mimeType } })!;
         } else {
@@ -126,7 +175,31 @@ export const createV1Router = () => {
             });
         }
 
-        res.status(isNew ? 201 : 200).json(item);
+        res.status(isNew ? 201 : 200).json(applySelect(item, req.query.$select as string));
+    });
+
+    // PUT /me/drive/items/{id}/content
+    app.put('/v1.0/me/drive/items/:itemId/content', (req: Request, res: Response) => {
+        const itemId = req.params.itemId as string;
+        let item = driveStore.getItem(itemId);
+
+        if (!item || item.folder) {
+            res.status(404).json({ error: { code: "itemNotFound", message: "Item not found" } });
+            return;
+        }
+
+        const ifMatch = req.header('If-Match');
+        if (ifMatch && ifMatch !== item.eTag) {
+            res.status(412).json({ error: { code: "PreconditionFailed", message: "ETag mismatch" } });
+            return;
+        }
+
+        const content = req.rawBody !== undefined ? req.rawBody : req.body;
+        const headerMime = req.headers['content-type'];
+        const mimeType = (Array.isArray(headerMime) ? headerMime[0] : headerMime) || item.file?.mimeType || 'application/octet-stream';
+
+        item = driveStore.updateItem(item.id, { content, file: { mimeType } })!;
+        res.status(200).json(applySelect(item, req.query.$select as string));
     });
 
     // Delta Query

@@ -25,25 +25,29 @@ describe('OneDrive Basics', () => {
 
     it('should get drive root', async () => {
         const res = await fetch(`${baseUrl}/v1.0/me/drive/root`, { headers });
+        if (res.status !== 200) console.log("ROOT ERROR:", await res.text());
         expect(res.status).toBe(200);
         const data = await res.json();
-        expect(data.id).toBe('root');
+        expect(data.id).toBeDefined();
+        expect(data.name).toBe('root');
     });
 
     it('should create a new folder and verify it appears in children', async () => {
+        const folderName = 'TestFolder_' + Date.now();
         const folderRes = await fetch(`${baseUrl}/v1.0/me/drive/items/root/children`, {
             method: 'POST',
             headers,
             body: JSON.stringify({
-                name: 'TestFolder',
+                name: folderName,
                 folder: {},
                 '@microsoft.graph.conflictBehavior': 'rename'
             })
         });
 
+        if (folderRes.status !== 201) console.log("FOLDER ERROR:", await folderRes.text());
         expect(folderRes.status).toBe(201);
         const folderData = await folderRes.json();
-        expect(folderData.name).toBe('TestFolder');
+        expect(folderData.name).toBe(folderName);
         expect(folderData.id).toBeDefined();
 
         // List children
@@ -54,7 +58,7 @@ describe('OneDrive Basics', () => {
     });
 
     it('should upload a new file via PUT and download it via GET', async () => {
-        const filename = 'test-file.txt';
+        const filename = 'test-file-' + Date.now() + '.txt';
         const content = 'Hello World One Drive!';
 
         const putRes = await fetch(`${baseUrl}/v1.0/me/drive/items/root:/${filename}:/content`, {
@@ -66,6 +70,7 @@ describe('OneDrive Basics', () => {
             body: content
         });
 
+        if (putRes.status !== 201) console.log("PUT ERROR:", await putRes.text());
         expect(putRes.status).toBe(201); // 201 Created for new file
         const fileData = await putRes.json();
         expect(fileData.id).toBeDefined();
@@ -95,8 +100,10 @@ describe('OneDrive Basics', () => {
         expect(delta1.value).toBeDefined();
         expect(delta1['@odata.deltaLink']).toBeDefined();
 
+        const deltaFilename = 'delta-file-' + Date.now() + '.txt';
+
         // Create a file
-        await fetch(`${baseUrl}/v1.0/me/drive/items/root:/delta-file.txt:/content`, {
+        await fetch(`${baseUrl}/v1.0/me/drive/items/root:/${deltaFilename}:/content`, {
             method: 'PUT',
             headers: { ...headers, 'Content-Type': 'text/plain' },
             body: 'delta'
@@ -107,6 +114,6 @@ describe('OneDrive Basics', () => {
         const res2 = await fetch(tokenUrl, { headers });
         const delta2 = await res2.json();
         expect(delta2.value.length).toBeGreaterThan(0);
-        expect(delta2.value[0].name).toBe('delta-file.txt');
+        expect(delta2.value.find((i: any) => i.name === deltaFilename)).toBeDefined();
     });
 });

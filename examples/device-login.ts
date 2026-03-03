@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const clientId = 'e5f346a8-8996-4d46-9f93-6e6817d9078e';
-const tenantId = '3e8159db-a172-4a3a-93b2-19d62ae430da';
+const tenantId = 'common';
 
 async function runDeviceLogin() {
     const authority = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0`;

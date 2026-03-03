@@ -134,6 +134,10 @@ export class DriveStore {
         return allItems.filter(i => i.parentReference?.id === parentId);
     }
 
+    getAllItems(): DriveItem[] {
+        return Array.from(this.items.values());
+    }
+
     clear(): void {
         this.items.clear();
         this.deltaHistory = [];

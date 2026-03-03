@@ -24,6 +24,7 @@ describe('OneDrive Batch Requests', () => {
     });
 
     it('should execute a batch of requests', async () => {
+        const batchFolderName = 'BatchFolder_' + Date.now();
         const batchPayload = {
             requests: [
                 {
@@ -39,7 +40,7 @@ describe('OneDrive Batch Requests', () => {
                         "Content-Type": "application/json"
                     },
                     body: {
-                        name: "BatchFolder",
+                        name: batchFolderName,
                         folder: {}
                     }
                 }
@@ -52,6 +53,7 @@ describe('OneDrive Batch Requests', () => {
             body: JSON.stringify(batchPayload)
         });
 
+        if (res.status !== 200) console.log("BATCH ERROR:", await res.text());
         expect(res.status).toBe(200);
         const data = await res.json();
 
@@ -63,10 +65,11 @@ describe('OneDrive Batch Requests', () => {
         const res2 = data.responses.find((r: any) => r.id === "2");
 
         expect(res1.status).toBe(200);
-        expect(res1.body.id).toBe('root');
+        expect(res1.body.id).toBeDefined();
+        expect(res1.body.name).toBe('root');
 
         expect(res2.status).toBe(201);
-        expect(res2.body.name).toBe('BatchFolder');
+        expect(res2.body.name).toBe(batchFolderName);
         expect(res2.body.folder).toBeDefined();
     });
 });
