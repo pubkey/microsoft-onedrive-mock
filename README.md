@@ -5,6 +5,7 @@
 <p style="text-align: center;">
 Mock-Server that simulates being Microsoft OneDrive (Graph API).<br />
 Used for testing the <a href="https://rxdb.info/" target="_blank">RxDB OneDrive-Sync</a>.<br />
+Sister project to <a href="https://github.com/pubkey/google-drive-mock" target="_blank">google-drive-mock</a>.<br />
 Mostly Vibe-Coded.<br />
 </p>
 
