@@ -58,6 +58,11 @@ const createApp = (config: AppConfig = {}) => {
         res.status(200).send('Cleared');
     });
 
+    // Health Check
+    app.get('/', (req, res) => {
+        res.status(200).send('OK');
+    });
+
     // Auth Middleware
     const validTokens = ['valid-token', 'another-valid-token'];
     app.use((req, res, next) => {
@@ -90,7 +95,8 @@ const startServer = (port: number, host: string = 'localhost', config: AppConfig
 };
 
 if (require.main === module) {
-    startServer(3000);
+    const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3006;
+    startServer(port);
 }
 
 export { createApp, startServer, driveStore };
