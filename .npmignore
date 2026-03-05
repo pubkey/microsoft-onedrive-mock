@@ -1,0 +1,13 @@
+.github
+src
+test
+examples
+specs
+scripts
+.agent
+.gitignore
+.npmrc
+.ENV_EXAMPLE
+tsconfig.json
+vitest.config.ts
+eslint.config.mjs
