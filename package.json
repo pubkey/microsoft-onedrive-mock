@@ -1,6 +1,6 @@
 {
   "name": "microsoft-onedrive-mock",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Mock-Server that simulates being Microsoft OneDrive. Used for testing.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
