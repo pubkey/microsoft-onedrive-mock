@@ -44,9 +44,91 @@ export const createV1Router = () => {
     // GET /me/drive/items/{id}/children
     app.get('/v1.0/me/drive/items/:itemId/children', (req: Request, res: Response) => {
         const itemId = req.params.itemId as string;
-        const children = driveStore.listItems(itemId);
+        let children = driveStore.listItems(itemId);
+
+        // Basic OData $filter REJECTION
+        if (req.query.$filter && typeof req.query.$filter === 'string') {
+            res.status(400).json({
+                error: {
+                    code: 'invalidRequest',
+                    message: 'Invalid request'
+                }
+            });
+            return;
+        }
+
+        // Basic OData $orderby support
+        if (req.query.$orderby && typeof req.query.$orderby === 'string') {
+            const descending = req.query.$orderby.includes('desc');
+            children.sort((a, b) => {
+                const timeA = a.lastModifiedDateTime || "";
+                const timeB = b.lastModifiedDateTime || "";
+                if (timeA === timeB) {
+                    return a.name > b.name ? 1 : -1;
+                }
+                if (descending) return timeA < timeB ? 1 : -1;
+                return timeA > timeB ? 1 : -1;
+            });
+        }
+
+        // Basic OData $top support and $skip REJECTION
+        let skip = 0;
+        if (req.query.$skip && typeof req.query.$skip === 'string') {
+            res.status(400).json({
+                error: {
+                    code: 'invalidRequest',
+                    message: '$skip is not supported on this API. Only URLs returned by the API can be used to page.'
+                }
+            });
+            return;
+        }
+
+        // Basic OData $top support and $skipToken pagination
+        if (req.query.$skipToken && typeof req.query.$skipToken === 'string') {
+            const parsedToken = parseInt(req.query.$skipToken, 10);
+            if (!isNaN(parsedToken)) skip = parsedToken;
+        }
+
+        let hasMore = false;
+        let nextSkipToken = 0;
+
+        if (req.query.$top && typeof req.query.$top === 'string') {
+            const top = parseInt(req.query.$top, 10);
+            if (!isNaN(top)) {
+                if (skip + top < children.length) {
+                    hasMore = true;
+                    nextSkipToken = skip + top;
+                }
+                children = children.slice(skip, skip + top);
+            }
+        } else if (skip > 0) {
+            children = children.slice(skip);
+        }
+
         const mappedChildren = children.map(c => applySelect(c, req.query.$select as string));
-        res.json({ value: mappedChildren });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const response: any = { value: mappedChildren };
+
+        if (hasMore) {
+            const host = req.headers.host || 'localhost';
+            const protocol = req.protocol || 'http';
+            const baseBaseUrl = `${protocol}://${host}`;
+            const url = new URL(req.originalUrl || req.url, baseBaseUrl);
+            url.searchParams.set('$skipToken', nextSkipToken.toString());
+            response['@odata.nextLink'] = url.toString();
+        }
+
+        if (req.query.$count === 'true') {
+            res.status(400).json({
+                error: {
+                    code: 'invalidRequest',
+                    message: '$count is not supported on this API. Only URLs returned by the API can be used to page.'
+                }
+            });
+            return;
+        }
+
+        res.json(response);
     });
 
     // GET /me/drive/root/search(q='query')
@@ -105,12 +187,38 @@ export const createV1Router = () => {
 
         const ifMatch = req.header('If-Match');
         if (ifMatch && ifMatch !== item.eTag) {
-            res.status(412).json({ error: { code: "PreconditionFailed", message: "ETag mismatch" } });
+            res.status(409).json({ error: { code: "preconditionFailed", message: "ETag mismatch" } });
             return;
         }
 
         driveStore.deleteItem(fileId);
         res.status(204).send();
+    });
+
+    // PATCH /me/drive/items/{id}
+    app.patch('/v1.0/me/drive/items/:itemId', (req: Request, res: Response) => {
+        const fileId = req.params.itemId as string;
+        if (fileId === 'root') {
+            res.status(400).json({ error: { message: "Cannot modify root" } });
+            return;
+        }
+
+        const item = driveStore.getItem(fileId);
+        if (!item) {
+            res.status(404).json({ error: { code: "itemNotFound", message: "Item not found" } });
+            return;
+        }
+
+        const ifMatch = req.header('If-Match');
+        if (ifMatch && ifMatch !== item.eTag) {
+            res.status(409).json({ error: { code: "preconditionFailed", message: "ETag mismatch" } });
+            return;
+        }
+
+        const updates = req.body;
+        const updatedItem = driveStore.updateItem(fileId, updates);
+
+        res.status(200).json(applySelect(updatedItem, req.query.$select as string));
     });
 
     // GET /me/drive/items/{id}/content
@@ -164,14 +272,16 @@ export const createV1Router = () => {
             }
 
             // Update
-            item = driveStore.updateItem(item.id, { content, file: { mimeType } })!;
+            const size = content ? (Buffer.isBuffer(content) || typeof content === 'string' ? content.length : JSON.stringify(content).length) : 0;
+            item = driveStore.updateItem(item.id, { content, file: { mimeType }, size })!;
         } else {
             // Create
             item = driveStore.createItem({
                 name: filename,
                 parentReference: { id: parentId },
                 content,
-                file: { mimeType }
+                file: { mimeType },
+                size: content ? (Buffer.isBuffer(content) || typeof content === 'string' ? content.length : JSON.stringify(content).length) : 0
             });
         }
 
@@ -198,7 +308,9 @@ export const createV1Router = () => {
         const headerMime = req.headers['content-type'];
         const mimeType = (Array.isArray(headerMime) ? headerMime[0] : headerMime) || item.file?.mimeType || 'application/octet-stream';
 
-        item = driveStore.updateItem(item.id, { content, file: { mimeType } })!;
+        const size = content ? (Buffer.isBuffer(content) || typeof content === 'string' ? content.length : JSON.stringify(content).length) : 0;
+        item = driveStore.updateItem(item.id, { content, file: { mimeType }, size })!;
+
         res.status(200).json(applySelect(item, req.query.$select as string));
     });
 

@@ -95,7 +95,7 @@ describe('OneDrive Basics', () => {
     });
 
     it('should handle delta queries', async () => {
-        const res1 = await fetch(`${baseUrl}/v1.0/me/drive/root/delta`, { headers });
+        const res1 = await fetch(`${baseUrl}/v1.0/me/drive/root/delta?token=latest`, { headers });
         const delta1 = await res1.json();
         expect(delta1.value).toBeDefined();
         expect(delta1['@odata.deltaLink']).toBeDefined();

@@ -156,6 +156,13 @@ export class DriveStore {
     }
 
     getDelta(token?: string): { items: DriveItem[], deltaLink: string } {
+        if (token === 'latest') {
+            return {
+                items: [],
+                deltaLink: String(this.deltaHistory.length)
+            };
+        }
+
         const tokenIndex = token ? parseInt(token, 10) : 0;
         const start = isNaN(tokenIndex) ? 0 : Math.max(0, tokenIndex);
 

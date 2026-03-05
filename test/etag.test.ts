@@ -66,4 +66,79 @@ describe('ETag and Conditional Operations (If-Match)', () => {
         expect(newFileData.eTag).toBeDefined();
         expect(newFileData.eTag).not.toBe(etag);
     });
+
+    it('should support If-Match on DELETE operation', async () => {
+        const filename = 'delete-etag-test-' + Date.now() + '.txt';
+
+        // 1. Create file
+        const putRes = await fetch(`${baseUrl}/v1.0/me/drive/items/root:/${filename}:/content`, {
+            method: 'PUT',
+            headers: { ...headers, 'Content-Type': 'text/plain' },
+            body: 'Delete me'
+        });
+        expect(putRes.status).toBe(201);
+        const fileData = await putRes.json();
+        const etag = fileData.eTag;
+        const fileId = fileData.id;
+
+        // 2. Delete with Wrong ETag
+        const invalidEtag = etag.replace(/.$/, '0');
+        const deleteFail = await fetch(`${baseUrl}/v1.0/me/drive/items/${fileId}`, {
+            method: 'DELETE',
+            headers: { ...headers, 'If-Match': invalidEtag }
+        });
+
+        expect(deleteFail.status).toBe(409); // Conflict
+
+        // Verification: file still exists
+        const verifyRes = await fetch(`${baseUrl}/v1.0/me/drive/items/${fileId}`, { headers });
+        expect(verifyRes.status).toBe(200);
+
+        // 3. Delete with Correct ETag
+        const deleteSuccess = await fetch(`${baseUrl}/v1.0/me/drive/items/${fileId}`, {
+            method: 'DELETE',
+            headers: { ...headers, 'If-Match': etag }
+        });
+        expect(deleteSuccess.status).toBe(204); // No Content
+
+        // Verification: file deleted
+        const verifyDeleted = await fetch(`${baseUrl}/v1.0/me/drive/items/${fileId}`, { headers });
+        expect(verifyDeleted.status).toBe(404);
+    });
+
+    it('should support If-Match on PATCH metadata update', async () => {
+        const filename = 'patch-etag-test-' + Date.now() + '.txt';
+
+        // 1. Create file
+        const putRes = await fetch(`${baseUrl}/v1.0/me/drive/items/root:/${filename}:/content`, {
+            method: 'PUT',
+            headers: { ...headers, 'Content-Type': 'text/plain' },
+            body: 'Patch me'
+        });
+        expect(putRes.status).toBe(201);
+        const fileData = await putRes.json();
+        const etag = fileData.eTag;
+        const fileId = fileData.id;
+
+        // 2. Update with Wrong ETag
+        const invalidEtag = etag.replace(/.$/, '0');
+        const patchFail = await fetch(`${baseUrl}/v1.0/me/drive/items/${fileId}`, {
+            method: 'PATCH',
+            headers: { ...headers, 'Content-Type': 'application/json', 'If-Match': invalidEtag },
+            body: JSON.stringify({ name: 'renamed-' + filename })
+        });
+
+        expect(patchFail.status).toBe(409);
+
+        // 3. Update with Correct ETag
+        const patchSuccess = await fetch(`${baseUrl}/v1.0/me/drive/items/${fileId}`, {
+            method: 'PATCH',
+            headers: { ...headers, 'Content-Type': 'application/json', 'If-Match': etag },
+            body: JSON.stringify({ name: 'renamed-' + filename })
+        });
+
+        expect(patchSuccess.status).toBe(200);
+        const patchData = await patchSuccess.json();
+        expect(patchData.name).toBe('renamed-' + filename);
+    });
 });
