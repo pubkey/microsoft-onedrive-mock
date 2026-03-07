@@ -5,10 +5,13 @@ export class DriveStore {
     private items: Map<string, DriveItem>;
     // To support delta we need a linear history of items created/updated/deleted
     private deltaHistory: DriveItem[];
+    // Track active upload sessions
+    private uploadSessions: Map<string, { parentId: string, filename: string, expirationDateTime: string }>;
 
     constructor() {
         this.items = new Map();
         this.deltaHistory = [];
+        this.uploadSessions = new Map();
     }
 
     private calculateStats(content: unknown): { size: number, sha1Hash: string } {
@@ -106,6 +109,11 @@ export class DriveStore {
         return this.items.get(id) || null;
     }
 
+    getItemByName(parentId: string, name: string): DriveItem | null {
+        const children = this.listItems(parentId);
+        return children.find(c => c.name === name && !c.deleted) || null;
+    }
+
     deleteItem(id: string): boolean {
         const item = this.items.get(id);
         if (!item) return false;
@@ -141,9 +149,45 @@ export class DriveStore {
     clear(): void {
         this.items.clear();
         this.deltaHistory = [];
+        this.uploadSessions.clear();
 
         // Always recreate a standard root folder
         this.createItem({ id: 'root', name: 'root' }, true);
+    }
+
+    // Upload Sessions
+    createUploadSession(parentId: string, filename: string): { uploadUrl: string, expirationDateTime: string } {
+        const sessionId = Math.random().toString(36).substring(7);
+        const expirationDateTime = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 1 day
+        this.uploadSessions.set(sessionId, { parentId, filename, expirationDateTime });
+
+        // Return a relative URL path to be prefixed by the router
+        return {
+            uploadUrl: `/upload-sessions/${sessionId}`,
+            expirationDateTime
+        };
+    }
+
+
+    completeUploadSession(sessionId: string) {
+        const session = this.uploadSessions.get(sessionId);
+        if (!session) return null;
+
+        this.uploadSessions.delete(sessionId);
+        const item = this.createItem({
+            name: session.filename,
+            file: { mimeType: 'application/octet-stream' },
+            parentReference: { id: session.parentId }
+        });
+        return item;
+    }
+
+    getUploadSession(sessionId: string): { parentId: string, filename: string, expirationDateTime: string } | null {
+        return this.uploadSessions.get(sessionId) || null;
+    }
+
+    deleteUploadSession(sessionId: string): void {
+        this.uploadSessions.delete(sessionId);
     }
 
     // Delta History (simulated changes API)

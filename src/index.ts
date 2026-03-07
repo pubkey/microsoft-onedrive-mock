@@ -66,6 +66,8 @@ const createApp = (config: AppConfig = {}) => {
     // Auth Middleware
     const validTokens = ['valid-token', 'another-valid-token'];
     app.use((req, res, next) => {
+        if (req.path.startsWith('/v1.0/upload-sessions')) return next();
+
         const authHeaderVal = req.headers.authorization;
         const authHeader = Array.isArray(authHeaderVal) ? authHeaderVal[0] : authHeaderVal;
 

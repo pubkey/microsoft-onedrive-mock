@@ -249,6 +249,43 @@ export const createV1Router = () => {
         }
     });
 
+    // Path-based Addressing
+    app.get('/v1.0/me/drive/items/:parentId\\:/:filename', (req: Request, res: Response) => {
+        const params = req.params as Record<string, string>;
+        const parentId = params.parentId;
+        let filename = params.filename;
+
+        if (filename.endsWith(':')) filename = filename.slice(0, -1);
+        filename = decodeURIComponent(filename);
+
+        const parentObj = driveStore.getItem(parentId) || (parentId === 'root' ? driveStore.getItem('root') : null);
+        if (!parentObj) {
+            return res.status(404).json({ error: { code: "itemNotFound", message: "Parent not found" } });
+        }
+
+        const child = driveStore.getItemByName(parentId, filename);
+        if (!child) {
+            return res.status(404).json({ error: { code: "itemNotFound", message: "Item not found" } });
+        }
+
+        res.status(200).json(applySelect(child, req.query.$select as string));
+    });
+
+    app.get('/v1.0/me/drive/root\\:/:filename', (req: Request, res: Response) => {
+        const params = req.params as Record<string, string>;
+        let filename = params.filename;
+
+        if (filename.endsWith(':')) filename = filename.slice(0, -1);
+        filename = decodeURIComponent(filename);
+
+        const child = driveStore.getItemByName('root', filename);
+        if (!child) {
+            return res.status(404).json({ error: { code: "itemNotFound", message: "Item not found" } });
+        }
+
+        res.status(200).json(applySelect(child, req.query.$select as string));
+    });
+
     // PUT /me/drive/items/{parent-id}:/{filename}:/content
     app.put('/v1.0/me/drive/items/:parentId\\:/:filename\\:/content', (req: Request, res: Response) => {
         const parentId = req.params.parentId as string;
@@ -333,6 +370,160 @@ export const createV1Router = () => {
             '@odata.deltaLink': `${baseUrl}/v1.0/me/drive/root/delta?token=${result.deltaLink}`,
             value: result.items
         });
+    });
+
+    // ==========================================
+    // MISSING ENDPOINTS IMPLEMENTATION
+    // ==========================================
+
+    // --- Drives & Shared Content ---
+    const defaultDrive = {
+        id: "b!default-mock-drive-id",
+        driveType: "personal",
+        name: "OneDrive",
+        owner: { user: { id: "user1", displayName: "Mock User" } }
+    };
+
+    app.get('/v1.0/me/drives', (req, res) => {
+        res.json({ value: [defaultDrive] });
+    });
+
+    app.get('/v1.0/drives/:driveId', (req, res) => {
+        res.json(defaultDrive);
+    });
+
+    app.get('/v1.0/me/drive/sharedWithMe', (req, res) => {
+        res.json({ value: [] });
+    });
+
+    app.get('/v1.0/me/drive/recent', (req, res) => {
+        res.json({ value: [] });
+    });
+
+    app.get('/v1.0/me/drive/following', (req, res) => {
+        res.json({ value: [] });
+    });
+
+    // --- Special Folders ---
+    app.get('/v1.0/me/drive/special/:folderName', (req, res) => {
+        const root = driveStore.getItem('root');
+        if (!root) return res.status(404).json({ error: { message: "Not found" } });
+        res.json(root);
+    });
+
+    // --- Advanced Item Operations ---
+    app.post('/v1.0/me/drive/items/:itemId/copy', (req, res) => {
+        const itemId = req.params.itemId;
+        const item = driveStore.getItem(itemId);
+        if (!item) return res.status(404).json({ error: { message: "Not found" } });
+
+        const host = req.headers.host || 'localhost';
+        const protocol = req.protocol || 'http';
+        const baseUrl = `${protocol}://${host}`;
+
+        res.setHeader('Location', `${baseUrl}/v1.0/monitor/mock-copy-job-12345`);
+        res.status(202).json({});
+    });
+
+    app.post('/v1.0/me/drive/items/:itemId/createLink', (req, res) => {
+        const item = driveStore.getItem(req.params.itemId);
+        if (!item) return res.status(404).json({ error: { message: "Not found" } });
+        res.json({
+            id: "mock-link-id",
+            roles: ["write"],
+            link: { webUrl: "https://mock-onedrive-link/123" }
+        });
+    });
+
+    app.get('/v1.0/me/drive/items/:itemId/permissions', (req, res) => {
+        res.json({ value: [{ id: "perm1", roles: ["write"] }] });
+    });
+
+    app.post('/v1.0/me/drive/items/:itemId/invite', (req, res) => {
+        res.json({ value: [{ id: "perm1", roles: ["write"] }] });
+    });
+
+    app.delete('/v1.0/me/drive/items/:itemId/permissions/:permId', (req, res) => {
+        res.status(204).send();
+    });
+
+    app.get('/v1.0/me/drive/items/:itemId/versions', (req, res) => {
+        res.json({ value: [] });
+    });
+
+    app.post('/v1.0/me/drive/items/:itemId/versions/:versionId/restoreVersion', (req, res) => {
+        res.status(204).send();
+    });
+
+    app.post('/v1.0/me/drive/items/:itemId/checkout', (req, res) => {
+        res.status(204).send();
+    });
+
+    app.post('/v1.0/me/drive/items/:itemId/checkin', (req, res) => {
+        res.status(204).send();
+    });
+
+    app.get('/v1.0/me/drive/items/:itemId/thumbnails', (req, res) => {
+        res.json({
+            value: [
+                { id: "0", large: { url: "https://mock-thumbnail-url/large" } }
+            ]
+        });
+    });
+
+    app.get('/v1.0/me/drive/items/:itemId/activities', (req, res) => {
+        res.json({ value: [] });
+    });
+
+    // --- Upload Sessions ---
+    const handleCreateUploadSession = (parentId: string, filename: string, req: express.Request, res: express.Response) => {
+        const parentObj = driveStore.getItem(parentId) || (parentId === 'root' ? driveStore.getItem('root') : null);
+        if (!parentObj) {
+            return res.status(404).json({ error: { code: "itemNotFound", message: "Parent not found" } });
+        }
+
+        const session = driveStore.createUploadSession(parentId, filename);
+
+        const host = req.headers.host || 'localhost';
+        const protocol = req.protocol || 'http';
+        const baseUrl = `${protocol}://${host}`;
+
+        res.status(200).json({
+            uploadUrl: `${baseUrl}/v1.0${session.uploadUrl}`,
+            expirationDateTime: session.expirationDateTime
+        });
+    };
+
+    app.post('/v1.0/me/drive/items/:parentId\\:/:filename\\:/createUploadSession', (req, res) => {
+        const params = req.params as Record<string, string>;
+        handleCreateUploadSession(params.parentId, decodeURIComponent(params.filename), req, res);
+    });
+
+    app.post('/v1.0/me/drive/root\\:/:filename\\:/createUploadSession', (req, res) => {
+        const params = req.params as Record<string, string>;
+        handleCreateUploadSession('root', decodeURIComponent(params.filename), req, res);
+    });
+
+    // --- Subscriptions ---
+    app.post('/v1.0/subscriptions', (req, res) => {
+        res.status(201).json({
+            id: "mock-subscription-123",
+            expirationDateTime: new Date(Date.now() + 2 * 24 * 3600 * 1000).toISOString(),
+            clientState: req.body.clientState || "mock-secret"
+        });
+    });
+
+    app.get('/v1.0/subscriptions', (req, res) => {
+        res.json({ value: [] });
+    });
+
+    app.put('/v1.0/upload-sessions/:sessionId', express.raw({ type: '*/*', limit: '50mb' }), (req, res) => {
+        const sessionId = req.params.sessionId;
+        const session = driveStore.getUploadSession(sessionId);
+        if (!session) return res.status(404).json({ error: { message: "Session not found" } });
+
+        const item = driveStore.completeUploadSession(sessionId);
+        res.status(200).json(item);
     });
 
     return app;
