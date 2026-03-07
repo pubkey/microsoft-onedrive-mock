@@ -46,15 +46,33 @@ export const createV1Router = () => {
         const itemId = req.params.itemId as string;
         let children = driveStore.listItems(itemId);
 
-        // Basic OData $filter REJECTION
+        // Basic OData $filter support for lastModifiedDateTime (RxDB sync)
         if (req.query.$filter && typeof req.query.$filter === 'string') {
-            res.status(400).json({
-                error: {
-                    code: 'invalidRequest',
-                    message: 'Invalid request'
-                }
-            });
-            return;
+            const filterStr = req.query.$filter;
+            // Support formats like: lastModifiedDateTime ge '2026-03-07T16:41:28.611Z'
+            const match = filterStr.match(/lastModifiedDateTime\s+(ge|gt|le|lt|eq)\s+'?([^'\s]+)'?/);
+            if (match) {
+                const operator = match[1];
+                const dateVal = match[2];
+                children = children.filter(c => {
+                    const cTime = c.lastModifiedDateTime || "";
+                    if (operator === 'ge') return cTime >= dateVal;
+                    if (operator === 'gt') return cTime > dateVal;
+                    if (operator === 'le') return cTime <= dateVal;
+                    if (operator === 'lt') return cTime < dateVal;
+                    if (operator === 'eq') return cTime === dateVal;
+                    return true;
+                });
+            } else {
+                // For unsupported filters, return 400 to match real API strictness
+                res.status(400).json({
+                    error: {
+                        code: 'invalidRequest',
+                        message: 'Invalid request'
+                    }
+                });
+                return;
+            }
         }
 
         // Basic OData $orderby support

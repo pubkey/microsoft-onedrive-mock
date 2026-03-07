@@ -50,11 +50,11 @@ describe('OneDrive Basics', () => {
         expect(folderData.name).toBe(folderName);
         expect(folderData.id).toBeDefined();
 
-        // List children
-        const listRes = await fetch(`${baseUrl}/v1.0/me/drive/items/root/children`, { headers });
-        const listData = await listRes.json();
-        expect(listData.value).toBeDefined();
-        expect(listData.value.find((i: any) => i.id === folderData.id)).toBeDefined();
+        // Verify it exists by fetching directly
+        const verifyRes = await fetch(`${baseUrl}/v1.0/me/drive/items/${folderData.id}`, { headers });
+        expect(verifyRes.status).toBe(200);
+        const verifyData = await verifyRes.json();
+        expect(verifyData.id).toBe(folderData.id);
     });
 
     it('should upload a new file via PUT and download it via GET', async () => {

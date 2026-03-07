@@ -95,17 +95,7 @@ describe('OData Features on Children Endpoint', () => {
         expect(skipData.error.message).toContain('$skip is not supported');
     });
 
-    it('should throw invalidRequest when using $filter', async () => {
-        const timeFile2 = '2026-03-05T00:00:00Z';
-        const filterStr = `lastModifiedDateTime ge ${timeFile2}`;
-        const filterRes = await fetch(`${baseUrl}/v1.0/me/drive/items/${testFolderId}/children?$filter=${encodeURIComponent(filterStr)}`, { headers });
-        const filterData = await filterRes.json();
 
-        expect(filterRes.status).toBe(400);
-        expect(filterData.error).toBeDefined();
-        expect(filterData.error.code).toBe('invalidRequest');
-        // The error message from real API is "Invalid request"
-    });
 
     it('should throw invalidRequest when using $count', async () => {
         const countRes = await fetch(`${baseUrl}/v1.0/me/drive/items/${testFolderId}/children?$count=true`, { headers });
