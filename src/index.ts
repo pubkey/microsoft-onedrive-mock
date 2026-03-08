@@ -99,6 +99,7 @@ const createApp = (config: AppConfig = {}) => {
     app.use(createV1Router());
 
     // Error handler for body-parser syntax errors
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     app.use((err: any, req: Request, res: express.Response, next: express.NextFunction) => {
         if (err instanceof SyntaxError && 'status' in err && err.status === 400 && 'body' in err) {
             res.status(400).json({
