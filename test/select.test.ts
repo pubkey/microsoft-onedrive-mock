@@ -41,16 +41,25 @@ describe('Field Selection Parity ($select)', () => {
     });
 
     it('should return only requested fields in list arrays', async () => {
+        // Create an isolated parent folder to avoid pagination issues in root
+        const parentName = 'SelectParent_' + Date.now();
+        const parentRes = await fetch(`${baseUrl}/v1.0/me/drive/items/root/children`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ name: parentName, folder: {} })
+        });
+        const parent = await parentRes.json();
+
         // Create a subfolder to exist in children
         const folderName = 'SelectTestFolder_' + Date.now();
-        await fetch(`${baseUrl}/v1.0/me/drive/items/root/children`, {
+        await fetch(`${baseUrl}/v1.0/me/drive/items/${parent.id}/children`, {
             method: 'POST',
             headers,
             body: JSON.stringify({ name: folderName, folder: {} })
         });
 
         // 2. Get children with $select bounds
-        const res = await fetch(`${baseUrl}/v1.0/me/drive/items/root/children?$select=id,name`, { headers });
+        const res = await fetch(`${baseUrl}/v1.0/me/drive/items/${parent.id}/children?$select=id,name`, { headers });
         expect(res.status).toBe(200);
 
         const data = await res.json();
@@ -62,7 +71,11 @@ describe('Field Selection Parity ($select)', () => {
 
         // Deeply check that testFolder inside the array respect limits
         expect(testFolder.id).toBeDefined();
+        expect(testFolder.name).toBeDefined();
         expect(testFolder.size).toBeUndefined();
         expect(testFolder.folder).toBeUndefined();
+
+        // Cleanup
+        await fetch(`${baseUrl}/v1.0/me/drive/items/${parent.id}`, { method: 'DELETE', headers });
     });
 });

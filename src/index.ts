@@ -28,6 +28,24 @@ const createApp = (config: AppConfig = {}) => {
         next();
     });
 
+    const rawParser = express.raw({
+        type: '*/*',
+        limit: '50mb',
+        verify: (req: Request, res, buf) => {
+            req.rawBody = buf;
+        }
+    });
+
+    // For file contents and upload sessions, always parse as raw regardless of Content-Type.
+    // This prevents express.json() from attempting to parse invalid JSON and crashing.
+    app.use((req, res, next) => {
+        if (req.path.endsWith('/content') || req.path.includes('/upload-sessions')) {
+            rawParser(req, res, next);
+        } else {
+            next();
+        }
+    });
+
     app.use(express.json({
         verify: (req: Request, res, buf) => {
             req.rawBody = buf;
@@ -40,14 +58,8 @@ const createApp = (config: AppConfig = {}) => {
         }
     }));
 
-    // Explicit raw body for binary uploads
-    app.use(express.raw({
-        type: '*/*',
-        limit: '50mb',
-        verify: (req: Request, res, buf) => {
-            req.rawBody = buf;
-        }
-    }));
+    // Explicit raw body for binary uploads (catch-all for other routes if not json/text)
+    app.use(rawParser);
 
     // Batch Route
     app.post('/v1.0/$batch', handleBatchRequest);
@@ -85,6 +97,20 @@ const createApp = (config: AppConfig = {}) => {
     });
 
     app.use(createV1Router());
+
+    // Error handler for body-parser syntax errors
+    app.use((err: any, req: Request, res: express.Response, next: express.NextFunction) => {
+        if (err instanceof SyntaxError && 'status' in err && err.status === 400 && 'body' in err) {
+            res.status(400).json({
+                error: {
+                    code: 'invalidRequest',
+                    message: err.message
+                }
+            });
+            return;
+        }
+        next(err);
+    });
 
     return app;
 };
