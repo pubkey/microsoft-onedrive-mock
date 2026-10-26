@@ -152,8 +152,6 @@ export const createV1Router = () => {
     // GET /me/drive/root/search(q='query')
     app.get('/v1.0/me/drive/root/search\\(q=\':query\'\\)', (req: Request, res: Response) => {
         let query = (req.params.query as string) || "";
-        // Decode URI component incase it's URL encoded like %20 or %27
-        query = decodeURIComponent(query);
         // Strip out the trailing quote matching if it caught the literal '
         if (query.endsWith("'")) query = query.slice(0, -1);
         query = query.toLowerCase();
@@ -274,7 +272,6 @@ export const createV1Router = () => {
         let filename = params.filename;
 
         if (filename.endsWith(':')) filename = filename.slice(0, -1);
-        filename = decodeURIComponent(filename);
 
         const parentObj = driveStore.getItem(parentId) || (parentId === 'root' ? driveStore.getItem('root') : null);
         if (!parentObj) {
@@ -294,7 +291,6 @@ export const createV1Router = () => {
         let filename = params.filename;
 
         if (filename.endsWith(':')) filename = filename.slice(0, -1);
-        filename = decodeURIComponent(filename);
 
         const child = driveStore.getItemByName('root', filename);
         if (!child) {
@@ -514,12 +510,12 @@ export const createV1Router = () => {
 
     app.post('/v1.0/me/drive/items/:parentId\\:/:filename\\:/createUploadSession', (req, res) => {
         const params = req.params as Record<string, string>;
-        handleCreateUploadSession(params.parentId, decodeURIComponent(params.filename), req, res);
+        handleCreateUploadSession(params.parentId, params.filename, req, res);
     });
 
     app.post('/v1.0/me/drive/root\\:/:filename\\:/createUploadSession', (req, res) => {
         const params = req.params as Record<string, string>;
-        handleCreateUploadSession('root', decodeURIComponent(params.filename), req, res);
+        handleCreateUploadSession('root', params.filename, req, res);
     });
 
     // --- Subscriptions ---

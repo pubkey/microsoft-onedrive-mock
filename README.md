@@ -39,6 +39,10 @@ server.close();
 
 ```
 
+For path-based requests, encode each file name once with `encodeURIComponent(name)`.
+Use the same encoded relative URL inside `$batch` requests; the mock decodes path
+parameters and query strings once, preserving literal percent signs in names.
+
 ## Tech
 
 - TypeScript

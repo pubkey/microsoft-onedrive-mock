@@ -18,6 +18,7 @@ export const handleBatchRequest = async (req: Request, res: Response) => {
 
             // Reconstruct path. Graph batches often send relative urls like /me/drive/root
             // We append /v1.0/ to map to our internal routes if missing
+            // Keep the URL encoded so Express decodes params and query exactly once.
             const requestPath = url.startsWith('/v1.0') ? url : `/v1.0${url.startsWith('/') ? '' : '/'}${url}`;
 
             return new Promise((resolve) => {
@@ -25,8 +26,7 @@ export const handleBatchRequest = async (req: Request, res: Response) => {
                     method: method || 'GET',
                     url: requestPath,
                     headers: partHeaders || {},
-                    body: partBody,
-                    query: {}
+                    body: partBody
                 };
 
                 // Inject auth header from primary request to pass auth middleware
