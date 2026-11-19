@@ -40,7 +40,7 @@
   "homepage": "https://github.com/pubkey/microsoft-onedrive-mock#readme",
   "type": "commonjs",
   "peerDependencies": {
-    "express": "5.2.1"
+    "^express": "5.2.1"
   },
   "devDependencies": {
     "@eslint/js": "9.39.2",
